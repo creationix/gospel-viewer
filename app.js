@@ -68,7 +68,7 @@ function getZbook(book, callback) {
     console.log(data);
     var db = new SQL.Database(data);
     console.log(db);
-    var res = db.exec("SELECT * FROM nodes LIMIT 5");
+    var res = db.exec("SELECT * FROM nodes WHERE content IS NOT NULL LIMIT 5");
     res = res[0];
     console.log(res);
     res.values.forEach(function (row) {
@@ -77,9 +77,7 @@ function getZbook(book, callback) {
         obj[col] = row[i];
       });
       console.log(obj);
-      if (obj.content) {
-        document.write(obj.content);
-      }
+      document.write(obj.content + obj.refs);
     });
     console.log(res);
   });
