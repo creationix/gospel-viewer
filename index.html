@@ -3,7 +3,13 @@
 <head>
   <meta charset="utf8">
   <title>Gospel Library Web Reader</title>
-  <script src="pako_inflate.min.js"></script>
+  <script>
+    function require(name) {
+      if (name === "pako") return window.pako;
+      if (name === "sql.js") return window.SQL;
+    }
+  </script>
+  <script src="pako.js"></script>
   <script src="sql.js"></script>
   <script src="app.js"></script>
 </head>
