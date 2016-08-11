@@ -7,9 +7,12 @@
     function require(name) {
       if (name === "pako") return window.pako;
       if (name === "sql.js") return window.SQL;
+      if (name === "localforage") return {localforage: window.localforage};
     }
   </script>
   <script src="pako.js"></script>
+  <script src="dombuilder.js"></script>
+  <script src="localforage.min.js"></script>
   <script src="sql.js"></script>
   <script src="app.js"></script>
 </head>

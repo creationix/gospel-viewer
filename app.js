@@ -9,78 +9,106 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
 };
 const pako_1 = require("pako");
 const sql_js_1 = require("sql.js");
-let language = "2";
-let platform = "1";
-function fetchJson(url) {
+const localforage_1 = require("localforage");
+let platform = 17;
+function fetchJson(url, message) {
     return __awaiter(this, void 0, void 0, function* () {
+        if (message)
+            console.log(message);
+        console.warn("Fetch JSON", url);
         let res = yield fetch(url);
         return yield res.json();
     });
 }
-function fetchBinary(url) {
+function fetchBinary(url, message) {
     return __awaiter(this, void 0, void 0, function* () {
+        if (message)
+            console.log(message);
+        console.warn("Fetch Binary", url);
         let res = yield fetch(url);
         return new Uint8Array(yield res.arrayBuffer());
     });
 }
-function getLanguages() {
+function getLanguage() {
     return __awaiter(this, void 0, void 0, function* () {
-        console.log("Getting list of supported languages...");
-        return yield fetchJson("http://tech.lds.org/glweb?action=languages.query&format=json");
+        let language = yield localforage_1.localforage.getItem("language");
+        if (language)
+            return language;
+        let result = yield fetchJson("http://tech.lds.org/glweb?action=languages.query&format=json", "Getting list of supported languages...");
+        let languages = result.languages.sort((a, b) => { return a.id - b.id; });
+        language = languages[0].id;
+        yield localforage_1.localforage.setItem("language", language);
+        return language;
+    });
+}
+function updateCatalog(language) {
+    return __awaiter(this, void 0, void 0, function* () {
+        let update = yield fetchJson("http://tech.lds.org/glweb?action=catalog.query.modified&languageid=" +
+            language + "&platformid=" + platform + "&format=json", "Checking for catalog updates...");
+        let version = update.version;
+        if (version == (yield localforage_1.localforage.getItem("version"))) {
+            console.log("No catalog updates.");
+            return;
+        }
+        let result = yield fetchJson("http://tech.lds.org/glweb?action=catalog.query&languageid=" +
+            language + "&platformid=" + platform + "&format=json", "Downloading catalog...");
+        yield localforage_1.localforage.setItem("catalog", result.catalog);
+        yield localforage_1.localforage.setItem("version", version);
+        yield localforage_1.localforage.setItem("language", language);
+        yield localforage_1.localforage.setItem("platform", platform);
+        return result.catalog;
     });
 }
 function getCatalog() {
     return __awaiter(this, void 0, void 0, function* () {
-        console.log("Checking for catalog update...");
-        let update = yield fetchJson("http://tech.lds.org/glweb?action=catalog.query.modified&languageid=" +
-            language + "&platformid=" + platform + "&format=json");
-        let version = update.version;
-        if (platform == localStorage.getItem("platform") &&
-            language == localStorage.getItem("language") &&
-            version == localStorage.getItem("version")) {
-            console.log("No update, loading from cache.");
-            return JSON.parse(localStorage.getItem("catalog"));
+        let language = yield getLanguage();
+        let catalog = yield localforage_1.localforage.getItem("catalog");
+        if (catalog &&
+            platform == (yield localforage_1.localforage.getItem("platform")) &&
+            language == (yield localforage_1.localforage.getItem("language"))) {
+            updateCatalog(language);
+            return catalog;
         }
-        console.log("Updating catalog...");
-        let result = yield fetchJson("http://tech.lds.org/glweb?action=catalog.query&languageid=" +
-            language + "&platformid=" + platform + "&format=json");
-        localStorage.setItem("catalog", JSON.stringify(result.catalog));
-        localStorage.setItem("version", version);
-        localStorage.setItem("language", language);
-        localStorage.setItem("platform", platform);
-        return result.catalog;
+        return yield updateCatalog(language);
     });
 }
 function getZbook(book) {
     return __awaiter(this, void 0, void 0, function* () {
-        let data = yield fetchBinary(book.url);
-        console.log(data);
-        data = pako_1.inflate(data);
-        console.log(data);
-        return new sql_js_1.Database(data);
+        let file = yield localforage_1.localforage.getItem(book.file);
+        if (file) {
+            if (file.version !== book.file_version) {
+                fetchBinary(book.url, "Updating book " + book.name + "...").then(data => {
+                    file.data = data;
+                    return localforage_1.localforage.setItem(book.file, file);
+                });
+            }
+        }
+        else {
+            file = {
+                version: book.file_version,
+                data: yield fetchBinary(book.url, "Downloading book " + book.name + "...")
+            };
+            yield localforage_1.localforage.setItem(book.file, file);
+        }
+        return new sql_js_1.Database(pako_1.inflate(file.data));
     });
+}
+function byDisplayOrder(a, b) {
+    return a.display_order - b.display_order;
+}
+function render(data) {
+    let parts = [];
+    parts.push(["h1", data.name]);
+    for (let folder of data.folders.sort(byDisplayOrder)) {
+        parts.push([".folder", folder.name]);
+    }
+    return domBuilder(parts);
 }
 window.onload = function () {
     return __awaiter(this, void 0, void 0, function* () {
-        let langs = yield getLanguages();
         let catalog = yield getCatalog();
-        let folder = catalog.folders[0];
-        console.log("folder", folder);
-        let book = folder.books[0];
-        console.log("book", book);
-        let db = yield getZbook(book);
-        console.log(db);
-        let res = db.exec("SELECT * FROM nodes WHERE content IS NOT NULL LIMIT 5")[0];
-        console.log(res);
-        res.values.forEach(function (row) {
-            let obj = {};
-            res.columns.forEach(function (col, i) {
-                obj[col] = row[i];
-            });
-            console.log(obj);
-            document.write(obj.content + obj.refs);
-        });
-        console.log(res);
+        document.body.textContent = "";
+        document.body.appendChild(render(catalog));
     });
 };
 //# sourceMappingURL=app.js.map
