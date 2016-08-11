@@ -10,7 +10,6 @@ let language = "2"; // Español
 let platform = "1"; // iPhone
 // let platform = 17; // Android
 
-
 async function fetchJson(url) : Promise<any> {
   let res = await fetch(url);
   return await res.json();
@@ -53,24 +52,12 @@ async function getCatalog() {
   return result.catalog;
 }
 
-async function getZbook(book) {
+async function getZbook(book) : Promise<Database> {
   let data = await fetchBinary(book.url);
   console.log(data);
   data = inflate(data);
   console.log(data);
-  let db = new Database(data);
-  console.log(db);
-  let res = db.exec("SELECT * FROM nodes WHERE content IS NOT NULL LIMIT 5")[0];
-  console.log(res);
-  res.values.forEach(function (row) {
-    let obj:any = {};
-    res.columns.forEach(function (col, i) {
-      obj[col] = row[i];
-    });
-    console.log(obj);
-    document.write(obj.content + obj.refs);
-  });
-  console.log(res);
+  return new Database(data);
 }
 
 
@@ -83,4 +70,15 @@ window.onload = async function () {
   console.log("book", book);
   let db = await getZbook(book);
   console.log(db);
+  let res = db.exec("SELECT * FROM nodes WHERE content IS NOT NULL LIMIT 5")[0];
+  console.log(res);
+  res.values.forEach(function (row) {
+    let obj:any = {};
+    res.columns.forEach(function (col, i) {
+      obj[col] = row[i];
+    });
+    console.log(obj);
+    document.write(obj.content + obj.refs);
+  });
+  console.log(res);
 };

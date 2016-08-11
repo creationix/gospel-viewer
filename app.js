@@ -57,19 +57,7 @@ function getZbook(book) {
         console.log(data);
         data = pako_1.inflate(data);
         console.log(data);
-        let db = new sql_js_1.Database(data);
-        console.log(db);
-        let res = db.exec("SELECT * FROM nodes WHERE content IS NOT NULL LIMIT 5")[0];
-        console.log(res);
-        res.values.forEach(function (row) {
-            let obj = {};
-            res.columns.forEach(function (col, i) {
-                obj[col] = row[i];
-            });
-            console.log(obj);
-            document.write(obj.content + obj.refs);
-        });
-        console.log(res);
+        return new sql_js_1.Database(data);
     });
 }
 window.onload = function () {
@@ -82,6 +70,17 @@ window.onload = function () {
         console.log("book", book);
         let db = yield getZbook(book);
         console.log(db);
+        let res = db.exec("SELECT * FROM nodes WHERE content IS NOT NULL LIMIT 5")[0];
+        console.log(res);
+        res.values.forEach(function (row) {
+            let obj = {};
+            res.columns.forEach(function (col, i) {
+                obj[col] = row[i];
+            });
+            console.log(obj);
+            document.write(obj.content + obj.refs);
+        });
+        console.log(res);
     });
 };
 //# sourceMappingURL=app.js.map
