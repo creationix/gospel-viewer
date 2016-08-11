@@ -1,3 +1,5 @@
+
+///<reference path="whatwg-fetch.d.ts" />
 import { inflate } from "pako";
 import { Database } from "sql.js";
 
@@ -9,49 +11,26 @@ let platform = "1"; // iPhone
 // let platform = 17; // Android
 
 
-async function getText(url: string) {
-  return new Promise<string>((resolve, reject) => {
-    let xhr = new XMLHttpRequest();
-    xhr.open("GET", url);
-    xhr.onload = evt => {
-      resolve(xhr.responseText);
-    };
-    xhr.onerror = evt => {
-      reject(new Error("Error in XHR Request: " + xhr.statusText));
-    };
-    xhr.send();
-  });
+async function fetchJson(url) : Promise<any> {
+  let res = await fetch(url);
+  return await res.json();
 }
 
-async function getBinary(url: string) {
-  return new Promise<Uint8Array>((resolve, reject) => {
-    let xhr = new XMLHttpRequest();
-    xhr.open("GET", url);
-    xhr.responseType = "arraybuffer";
-    xhr.onload = evt => {
-      return resolve(new Uint8Array(xhr.response));
-    };
-    xhr.onerror = evt => {
-      reject(new Error("Error in XHR Request: " + xhr.statusText));
-    };
-    xhr.send();
-  });
-}
-
-async function getJson(url: string) {
-  return JSON.parse(await getText(url));
+async function fetchBinary(url) : Promise<Uint8Array> {
+  let res = await fetch(url);
+  return new Uint8Array(await res.arrayBuffer());
 }
 
 async function getLanguages() {
   console.log("Getting list of supported languages...");
-  return await getJson(
+  return await fetchJson(
     "http://tech.lds.org/glweb?action=languages.query&format=json"
   );
 }
 
 async function getCatalog() {
   console.log("Checking for catalog update...");
-  let update = await getJson(
+  let update = await fetchJson(
     "http://tech.lds.org/glweb?action=catalog.query.modified&languageid=" +
     language + "&platformid=" + platform + "&format=json"
   );
@@ -63,7 +42,7 @@ async function getCatalog() {
     return JSON.parse(localStorage.getItem("catalog"));
   }
   console.log("Updating catalog...");
-  let result = await getJson(
+  let result = await fetchJson(
     "http://tech.lds.org/glweb?action=catalog.query&languageid=" +
     language + "&platformid=" + platform + "&format=json"
   );
@@ -75,7 +54,7 @@ async function getCatalog() {
 }
 
 async function getZbook(book) {
-  let data = await getBinary(book.url);
+  let data = await fetchBinary(book.url);
   console.log(data);
   data = inflate(data);
   console.log(data);

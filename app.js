@@ -11,52 +11,28 @@ const pako_1 = require("pako");
 const sql_js_1 = require("sql.js");
 let language = "2";
 let platform = "1";
-function getText(url) {
+function fetchJson(url) {
     return __awaiter(this, void 0, void 0, function* () {
-        return new Promise((resolve, reject) => {
-            let xhr = new XMLHttpRequest();
-            xhr.open("GET", url);
-            xhr.onload = evt => {
-                resolve(xhr.responseText);
-            };
-            xhr.onerror = evt => {
-                reject(new Error("Error in XHR Request: " + xhr.statusText));
-            };
-            xhr.send();
-        });
+        let res = yield fetch(url);
+        return yield res.json();
     });
 }
-function getBinary(url) {
+function fetchBinary(url) {
     return __awaiter(this, void 0, void 0, function* () {
-        return new Promise((resolve, reject) => {
-            let xhr = new XMLHttpRequest();
-            xhr.open("GET", url);
-            xhr.responseType = "arraybuffer";
-            xhr.onload = evt => {
-                return resolve(new Uint8Array(xhr.response));
-            };
-            xhr.onerror = evt => {
-                reject(new Error("Error in XHR Request: " + xhr.statusText));
-            };
-            xhr.send();
-        });
-    });
-}
-function getJson(url) {
-    return __awaiter(this, void 0, void 0, function* () {
-        return JSON.parse(yield getText(url));
+        let res = yield fetch(url);
+        return new Uint8Array(yield res.arrayBuffer());
     });
 }
 function getLanguages() {
     return __awaiter(this, void 0, void 0, function* () {
         console.log("Getting list of supported languages...");
-        return yield getJson("http://tech.lds.org/glweb?action=languages.query&format=json");
+        return yield fetchJson("http://tech.lds.org/glweb?action=languages.query&format=json");
     });
 }
 function getCatalog() {
     return __awaiter(this, void 0, void 0, function* () {
         console.log("Checking for catalog update...");
-        let update = yield getJson("http://tech.lds.org/glweb?action=catalog.query.modified&languageid=" +
+        let update = yield fetchJson("http://tech.lds.org/glweb?action=catalog.query.modified&languageid=" +
             language + "&platformid=" + platform + "&format=json");
         let version = update.version;
         if (platform == localStorage.getItem("platform") &&
@@ -66,7 +42,7 @@ function getCatalog() {
             return JSON.parse(localStorage.getItem("catalog"));
         }
         console.log("Updating catalog...");
-        let result = yield getJson("http://tech.lds.org/glweb?action=catalog.query&languageid=" +
+        let result = yield fetchJson("http://tech.lds.org/glweb?action=catalog.query&languageid=" +
             language + "&platformid=" + platform + "&format=json");
         localStorage.setItem("catalog", JSON.stringify(result.catalog));
         localStorage.setItem("version", version);
@@ -77,7 +53,7 @@ function getCatalog() {
 }
 function getZbook(book) {
     return __awaiter(this, void 0, void 0, function* () {
-        let data = yield getBinary(book.url);
+        let data = yield fetchBinary(book.url);
         console.log(data);
         data = pako_1.inflate(data);
         console.log(data);
