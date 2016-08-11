@@ -3,6 +3,39 @@
 <head>
   <meta charset="utf8">
   <title>Gospel Library Web Reader</title>
+  <style>
+    body {
+      font-size: 2em !important;
+      background-color: #002b36;
+      color: #fdf6e3;
+    }
+    a {
+      color: #268bd2;
+    }
+    sup {
+      color: #93a1a1;
+    }
+    .book, .folder {
+      padding: 5px;
+      width: 12em;
+      min-height: 4em;
+      float: left;
+      margin: 5px;
+      text-align: center;
+    }
+    .book {
+      border: 1px solid #08f;
+    }
+    .folder {
+      border: 1px solid #f80;
+    }
+    .crumb {
+      display: inline-block;
+      margin: 5px;
+      padding: 5px;
+      border: 1px solid #f80;
+    }
+  </style>
   <script>
     function require(name) {
       if (name === "pako") return window.pako;

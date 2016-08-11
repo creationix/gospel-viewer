@@ -11,35 +11,41 @@ declare function domBuilder(body: Array<any>, scope? : any) : DocumentFragment;
 // let platform = 1; // iPhone
 let platform = 17; // Android
 
+// CORS proxy
+// You can disable this by setting it to empty string and instead using
+// a browser extension that injects cors headers.
+let proxy = "https://cors-anywhere.herokuapp.com/";
+
 async function fetchJson(url, message) : Promise<any> {
   if (message) console.log(message);
   console.warn("Fetch JSON", url);
-  let res = await fetch(url);
+  let res = await fetch(proxy + url);
   return await res.json();
 }
 
 async function fetchBinary(url, message) : Promise<Uint8Array> {
   if (message) console.log(message);
   console.warn("Fetch Binary", url);
-  let res = await fetch(url);
+  let res = await fetch(proxy + url);
   return new Uint8Array(await res.arrayBuffer());
 }
 
 async function getLanguage() : Promise<number> {
-  let language = await localforage.getItem<number>("language");
-  if (language) return language;
-  let result = await fetchJson(
-    "http://tech.lds.org/glweb?action=languages.query&format=json",
-    "Getting list of supported languages..."
-  );
-
-  // TODO: display list of languages to user and let them select.
-  // It can default to English so that only a quick click/tap is required.
-  // We could even detect the user's preference somehow via browser data?
-  let languages = result.languages.sort((a,b) => {return a.id - b.id;});
-  language = languages[0].id;
-  await localforage.setItem("language", language);
-  return language;
+  return 1;
+  // let language = await localforage.getItem<number>("language");
+  // if (language) return language;
+  // let result = await fetchJson(
+  //   "http://tech.lds.org/glweb?action=languages.query&format=json",
+  //   "Getting list of supported languages..."
+  // );
+  //
+  // // TODO: display list of languages to user and let them select.
+  // // It can default to English so that only a quick click/tap is required.
+  // // We could even detect the user's preference somehow via browser data?
+  // let languages = result.languages.sort((a,b) => {return a.id - b.id;});
+  // language = languages[0].id;
+  // await localforage.setItem("language", language);
+  // return language;
 }
 
 
@@ -84,30 +90,35 @@ interface BookFile {
   data: Uint8Array
 }
 
+let files = {};
 async function getZbook(book : Book) : Promise<Database> {
-  let file = await localforage.getItem<BookFile>(book.file);
-  if (file) {
-    if (file.version !== book.file_version) {
-      // Update book in background.
-      fetchBinary(
-        book.url,
-        "Updating book " + book.name + "..."
-      ).then(data => {
-        file.data = data;
-        // TODO: notify UI book has been updated
-        return localforage.setItem(book.file, file);
-      });
+  let file = files[book.file];
+  if (!file) {
+    file = await localforage.getItem<BookFile>(book.file);
+    if (file) {
+      if (file.version !== book.file_version) {
+        // Update book in background.
+        fetchBinary(
+          book.url,
+          "Updating book " + book.name + "..."
+        ).then(data => {
+          file.data = data;
+          // TODO: notify UI book has been updated
+          files[book.file] = file;
+          return localforage.setItem(book.file, file);
+        });
+      }
     }
-  }
-  else {
-    file = {
-      version: book.file_version,
-      data: await fetchBinary(
-        book.url,
-        "Downloading book " + book.name + "..."
-      )
-    };
-    await localforage.setItem(book.file, file);
+    else {
+      file = {
+        version: book.file_version,
+        data: await fetchBinary(
+          book.url,
+          "Downloading book " + book.name + "..."
+        )
+      };
+      await localforage.setItem(book.file, file);
+    }
   }
 
   return new Database(inflate(file.data));
@@ -135,34 +146,80 @@ function byDisplayOrder(a, b) {
   return a.display_order - b.display_order;
 }
 
-function render(data: Folder) : DocumentFragment {
+function renderBreadcrumbs(parents: Folder[]) : Array<any> {
+  return [".nav", parents.map((parent, i) => {
+    return ["span.crumb", {onclick:go}, parent.name]
+    function go(evt) {
+      evt.preventDefault();
+      parents.length = i;
+      renderFolder(parent, parents);
+    }
+  })];
+
+}
+
+
+async function renderBook(book: Book, parents: Folder[]) {
   let parts = [];
-  parts.push(["h1", data.name]);
-  for (let folder of data.folders.sort(byDisplayOrder)) {
-    parts.push([".folder", folder.name]);
+  parts.push(renderBreadcrumbs(parents));
+  parts.push([".loading", "Loading..."]);
+  document.body.textContent = "";
+  document.body.appendChild(domBuilder(parts));
+  parts.pop();
+
+  let db = await getZbook(book);
+
+  let results = db.exec("SELECT css FROM css");
+  for (let row of results[0].values) {
+    parts.push(['style', row[0]]);
   }
-  return domBuilder(parts);
+
+  results = db.exec("SELECT * FROM bookmeta");
+  console.log(results[0].values[0]);
+  // SELECT * FROM bookmeta LIMIT 3;
+
+
+  let res = db.exec("SELECT * FROM node WHERE content IS NOT NULL LIMIT 5")[0];
+  res.values.forEach(function (row) {
+    let obj:any = {};
+    res.columns.forEach(function (col, i) {
+      obj[col] = row[i];
+    });
+    parts.push([".content", {html: obj.content}]);
+    // parts.push([".refs", {html: obj.refs}]);
+  });
+  document.body.textContent = "";
+  document.body.appendChild(domBuilder(parts));
+}
+
+
+function renderFolder(data: Folder, parents: Folder[]) {
+  let parts = [];
+  parts.push(renderBreadcrumbs(parents));
+  parts.push(["h1", data.name]);
+  data.folders.sort(byDisplayOrder).forEach(function (folder) {
+    parts.push([".folder", {onclick: onClick}, folder.name]);
+    function onClick(evt) {
+      evt.preventDefault();
+      parents.push(data);
+      renderFolder(folder, parents);
+    }
+  });
+  data.books.sort(byDisplayOrder).forEach(function (book) {
+    parts.push([".book", {onclick: onClick}, book.name]);
+    function onClick(evt) {
+      evt.preventDefault();
+      parents.push(data);
+      renderBook(book, parents);
+    }
+  });
+  document.body.textContent = "";
+  document.body.appendChild(domBuilder(parts));
 }
 
 window.onload = async function () {
   let catalog = await getCatalog();
-  document.body.textContent = "";
-  document.body.appendChild(render(catalog));
-  // let folder = catalog.folders[0];
-  // console.log("folder", folder);
-  // let book = folder.books[0];
-  // console.log("book", book);
-  // let db = await getZbook(book);
-  // console.log(db);
-  // let res = db.exec("SELECT * FROM node WHERE content IS NOT NULL LIMIT 5")[0];
-  // console.log(res);
-  // res.values.forEach(function (row) {
-  //   let obj:any = {};
-  //   res.columns.forEach(function (col, i) {
-  //     obj[col] = row[i];
-  //   });
-  //   console.log(obj);
-  //   document.write(obj.content + obj.refs);
-  // });
-  // console.log(res);
+  let folder = catalog.folders[0];
+  let book = folder.books[0];
+  renderBook(book, [catalog, folder]);
 };

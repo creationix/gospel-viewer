@@ -70,6 +70,8 @@ function setAttrs(node, attrs) {
     var value = attrs[key];
     if (key === "$") {
       value(node);
+    } else if (key === "html") {
+      node.innerHTML = value;
     } else if (key === "css" || key === "style" && value.constructor === Object) {
       setStyle(node.style, value);
     } else if (key.substr(0, 2) === "on") {
