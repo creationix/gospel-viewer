@@ -142,6 +142,26 @@ interface Book {
   gl_uri: string;
 }
 
+interface Node {
+  id : number;
+  title : string;
+  uri : string;
+}
+
+function query<T>(db, sql) : Array<T> {
+  let results = db.exec(sql);
+  if (!results[0]) return;
+  let rows : Array<T> = [];
+  results[0].values.forEach(function (row) {
+    let obj = {} as T;
+    rows.push(obj);
+    results[0].columns.forEach(function (col, i) {
+      obj[col] = row[i];
+    });
+  });
+  return rows;
+}
+
 function byDisplayOrder(a, b) {
   return a.display_order - b.display_order;
 }
@@ -151,17 +171,26 @@ function renderBreadcrumbs(parents: Folder[]) : Array<any> {
     return ["span.crumb", {onclick:go}, parent.name]
     function go(evt) {
       evt.preventDefault();
-      parents.length = i;
-      renderFolder(parent, parents);
+      parents.length = i + 1;
+      renderFolder(parents);
     }
   })];
-
 }
 
 
-async function renderBook(book: Book, parents: Folder[]) {
+async function renderIndex(book: Book, folders: Folder[], nodes: Node[]) {
   let parts = [];
-  parts.push(renderBreadcrumbs(parents));
+  parts.push(renderBreadcrumbs(folders));
+  parts[parts.length - 1] = parts[parts.length - 1].concat(
+    nodes.map((node, i) => {
+     return ["span.crumb", {onclick:go,html: node.title}]
+     function go(evt) {
+       evt.preventDefault();
+       nodes.length = i + 1;
+       renderIndex(book, folders, nodes);
+     }
+    })
+  );
   parts.push([".loading", "Loading..."]);
   document.body.textContent = "";
   document.body.appendChild(domBuilder(parts));
@@ -169,48 +198,62 @@ async function renderBook(book: Book, parents: Folder[]) {
 
   let db = await getZbook(book);
 
-  let results = db.exec("SELECT css FROM css");
-  for (let row of results[0].values) {
-    parts.push(['style', row[0]]);
+
+  let parentId = nodes.length ? nodes[nodes.length - 1].id : 0;
+
+  // Get the TOC entries for the desired parent node.
+  let toc = query<Node>(db,
+    "SELECT id, title, uri FROM node WHERE parent_id = " + parentId
+  );
+  if (toc) {
+    toc.forEach(entry => {
+      parts.push([".doc", {onclick:read, html: entry.title}]);
+      function read(evt) {
+        evt.preventDefault();
+        console.log(entry);
+        nodes.push(entry);
+        renderIndex(book, folders, nodes);
+      }
+    });
   }
 
-  results = db.exec("SELECT * FROM bookmeta");
-  console.log(results[0].values[0]);
-  // SELECT * FROM bookmeta LIMIT 3;
+  let self = query<{content:string}>(db, "SELECT content FROM node WHERE id = " + parentId);
+  if (self) {
+    // Load book provided CSS
+    let css = query<{ css: string}>(db, "SELECT css FROM css")[0].css;
+    parts.push(['style', css]);
+
+    parts.push(["div", {html:self[0].content}]);
+  }
 
 
-  let res = db.exec("SELECT * FROM node WHERE content IS NOT NULL LIMIT 5")[0];
-  res.values.forEach(function (row) {
-    let obj:any = {};
-    res.columns.forEach(function (col, i) {
-      obj[col] = row[i];
-    });
-    parts.push([".content", {html: obj.content}]);
-    // parts.push([".refs", {html: obj.refs}]);
-  });
+
   document.body.textContent = "";
   document.body.appendChild(domBuilder(parts));
 }
 
 
-function renderFolder(data: Folder, parents: Folder[]) {
+function renderFolder(folders: Folder[]) {
   let parts = [];
-  parts.push(renderBreadcrumbs(parents));
-  parts.push(["h1", data.name]);
-  data.folders.sort(byDisplayOrder).forEach(function (folder) {
-    parts.push([".folder", {onclick: onClick}, folder.name]);
+  let folder = folders[folders.length - 1];
+  parts.push(renderBreadcrumbs(folders));
+  folder.folders.sort(byDisplayOrder).forEach(function (child) {
+    parts.push([".folder", {onclick: onClick}, child.name]);
     function onClick(evt) {
       evt.preventDefault();
-      parents.push(data);
-      renderFolder(folder, parents);
+      folders.push(child);
+      renderFolder(folders);
     }
   });
-  data.books.sort(byDisplayOrder).forEach(function (book) {
+  folder.books.sort(byDisplayOrder).forEach(function (book) {
     parts.push([".book", {onclick: onClick}, book.name]);
     function onClick(evt) {
       evt.preventDefault();
-      parents.push(data);
-      renderBook(book, parents);
+      renderIndex(book, folders, [{
+        id: 0,
+        title: book.name,
+        uri: book.gl_uri
+      }]);
     }
   });
   document.body.textContent = "";
@@ -221,5 +264,9 @@ window.onload = async function () {
   let catalog = await getCatalog();
   let folder = catalog.folders[0];
   let book = folder.books[0];
-  renderBook(book, [catalog, folder]);
+  renderIndex(book, [catalog, folder], [{
+    id: 0,
+    title: book.name,
+    uri: book.gl_uri
+  }]);
 };
